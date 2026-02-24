@@ -27,22 +27,19 @@ use tblgen::{TableGenParser, record::Record, record_keeper::RecordKeeper};
 
 const LLVM_INCLUDE_DIRECTORY: &str = env!("LLVM_INCLUDE_DIRECTORY");
 
-pub fn generate_dialect(input: DialectInput) -> Result<TokenStream, Box<dyn std::error::Error>> {
+pub fn generate_dialect(input: DialectInput) -> Result<TokenStream, Error> {
     let mut parser = TableGenParser::new();
 
     parser = parser.add_include_directory(LLVM_INCLUDE_DIRECTORY);
 
     for path in input.directories() {
-        let path = if matches!(
-            Path::new(path).components().next(),
-            Some(Component::CurDir | Component::ParentDir)
-        ) {
-            path.into()
-        } else {
-            Path::new(LLVM_INCLUDE_DIRECTORY).join(path)
-        };
+        parser = parser.add_include_directory(&resolve_include_directory(path));
+    }
 
-        parser = parser.add_include_directory(&path.display().to_string());
+    for (env_var, span) in input.directory_env_vars() {
+        parser = parser.add_include_directory(&resolve_include_directory(
+            &env::var(env_var).map_err(|error| syn::Error::new(*span, error.to_string()))?,
+        ));
     }
 
     if input.files().count() > 0 {
@@ -211,6 +208,19 @@ fn generate_dialect_module(
             #enum_definition
         }
     })
+}
+
+fn resolve_include_directory(path: &str) -> String {
+    if matches!(
+        Path::new(path).components().next(),
+        Some(Component::CurDir | Component::ParentDir)
+    ) {
+        path.into()
+    } else {
+        Path::new(LLVM_INCLUDE_DIRECTORY).join(path)
+    }
+    .display()
+    .to_string()
 }
 
 fn create_syn_error(error: impl Display) -> syn::Error {

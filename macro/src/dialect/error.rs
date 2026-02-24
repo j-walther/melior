@@ -1,6 +1,8 @@
 mod ods;
 
 pub use self::ods::OdsError;
+use proc_macro::TokenStream;
+use quote::quote;
 use std::{
     error,
     fmt::{self, Display, Formatter},
@@ -35,6 +37,22 @@ impl Error {
             | Self::Io(_)
             | Self::Syn(_)
             | Self::Utf8(_) => self,
+        }
+    }
+
+    pub fn to_compile_error(&self) -> TokenStream {
+        match self {
+            Self::Syn(err) => err.to_compile_error().into(),
+            Self::TableGen(_)
+            | Self::Ods(_)
+            | Self::Parse(_)
+            | Self::Format(_)
+            | Self::InvalidIdentifier(_)
+            | Self::Io(_)
+            | Self::Utf8(_) => {
+                let message = self.to_string();
+                quote! { compile_error!(#message) }.into()
+            }
         }
     }
 }
